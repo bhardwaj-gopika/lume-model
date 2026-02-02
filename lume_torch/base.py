@@ -391,7 +391,7 @@ class LUMEBaseModel(BaseModel, ABC):
     def input_validation(self, input_dict: dict[str, Any]) -> dict[str, Any]:
         for name, value in input_dict.items():
             _config = (
-                None
+                "none"
                 if self.input_validation_config is None
                 else self.input_validation_config.get(name)
             )

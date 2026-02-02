@@ -275,7 +275,7 @@ class TorchModule(torch.nn.Module):
 class FixedVariableModel(torch.nn.Module):
     """
     Prior model for Bayesian optimization.
-    This module wraps a LUME model and manages the seperation between control variables
+    This module wraps a LUME model and manages the separation between control variables
     and fixed variables (measured from the machine). It also maintains
     an efficient buffer of fixed variables that is updated periodically.
     The prior model is used as a mean function in Gaussian process models to incorporate
