@@ -62,21 +62,26 @@ class GPModel(ProbModelBaseModel):
     def validate_gp_model(cls, v):
         if isinstance(v, (str, os.PathLike)):
             if os.path.exists(v):
+                logger.info(f"Loading GP model from file: {v}")
                 v = torch.load(v, weights_only=False)
             else:
+                logger.error(f"GP model file not found: {v}")
                 raise OSError(f"File {v} is not found.")
         return v
 
     @field_validator("input_transformers", "output_transformers", mode="before")
     def validate_transformers(cls, v):
         if not isinstance(v, list):
+            logger.error(f"Transformers must be a list, got {type(v)}")
             raise ValueError("Transformers must be passed as list.")
         loaded_transformers = []
         for t in v:
             if isinstance(t, (str, os.PathLike)):
                 if os.path.exists(t):
+                    logger.debug(f"Loading transformer from file: {t}")
                     t = torch.load(t, weights_only=False)
                 else:
+                    logger.error(f"Transformer file not found: {t}")
                     raise OSError(f"File {t} is not found.")
             loaded_transformers.append(t)
         v = loaded_transformers
@@ -94,6 +99,7 @@ class GPModel(ProbModelBaseModel):
             elif isinstance(self.model.models[0], MultiTaskGP):
                 num_inputs = self.model.models[0].train_inputs[0].shape[-1] - 1
         else:
+            logger.error(f"Unsupported GP model type: {type(self.model)}")
             raise ValueError(
                 "Model must be an instance of SingleTaskGP, MultiTaskGP or ModelListGP."
             )

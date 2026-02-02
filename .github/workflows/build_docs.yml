@@ -17,23 +17,28 @@ jobs:
     name:  Build docs
     steps:
       - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: 3.12
-          channels: conda-forge,defaults
-          activate-environment: lume-torch-dev
-      - name: Build package
-        shell: bash -l {0}
-        run: |
-          pip install -e ".[docs]"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install requirements
+        run: uv sync --extra docs
+
       - name: Build docs
-        shell: bash -l {0}
-        run: |
-          mkdocs build
+        run: mkdocs build
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./site
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
 
   deploy:
     environment:

@@ -67,11 +67,13 @@ def process_torch_module(
     if save_modules:
         filepath = os.path.join(filepath_prefix, filename)
         torch.save(module, filepath)
+        logger.debug(f"Saved torch module to: {filepath}")
     if save_jit:
         filepath = os.path.join(filepath_prefix, jit_filename)
         try:
             scripted_model = torch.jit.script(module)
             torch.jit.save(scripted_model, filepath)
+            logger.debug(f"Saved JIT model to: {filepath}")
         except Exception as e:
             logger.warning(
                 "Saving as JIT through scripting has only been evaluated "
@@ -101,15 +103,22 @@ def recursive_serialize(
     Returns:
         Serialized object.
     """
+    logger.debug(
+        f"Serializing object with base_key: '{base_key}', {len(v)} top-level keys"
+    )
     # try to import modules for LUMEBaseModel child classes
     torch = try_import_module("torch")
     # serialize
     v = serialize_variables(v)
     for key, value in v.items():
         if isinstance(value, dict):
+            logger.debug(f"Recursively serializing nested dict for key: '{key}'")
             v[key] = recursive_serialize(value, key)
         elif isinstance(value, list) and all(isinstance(ele, dict) for ele in value):
             # e.g. NN ensemble
+            logger.debug(
+                f"Serializing NN ensemble with {len(value)} models for key: '{key}'"
+            )
             v[key] = [
                 recursive_serialize(
                     value[i], f"{base_key}{i}", file_prefix, save_models, save_jit
@@ -121,6 +130,7 @@ def recursive_serialize(
             # NOTE: If this clause is reached for other models, we may need to do this differently
             v[key] = [v[key][i]["model"] for i in range(len(value))]
         elif torch is not None and isinstance(value, torch.nn.Module):
+            logger.debug(f"Serializing torch.nn.Module for key: '{key}'")
             v[key] = process_torch_module(
                 value, base_key, key, file_prefix, save_models, save_jit
             )
@@ -130,6 +140,9 @@ def recursive_serialize(
             and any(isinstance(ele, torch.nn.Module) for ele in value)
         ):
             # List of transformers
+            logger.debug(
+                f"Serializing {len(value)} torch.nn.Module transformers for key: '{key}'"
+            )
             v[key] = [
                 process_torch_module(
                     value[i], base_key, f"{key}_{i}", file_prefix, save_models, False
@@ -139,11 +152,17 @@ def recursive_serialize(
         else:
             for _type, func in JSON_ENCODERS.items():
                 if isinstance(value, _type):
+                    logger.debug(
+                        f"Applying JSON encoder for type {_type.__name__} to key: '{key}'"
+                    )
                     v[key] = func(value)
         # check to make sure object has been serialized, if not use a generic serializer
         try:
             json.dumps(v[key])
         except (TypeError, OverflowError):
+            logger.debug(
+                f"Using generic serializer for unserializable object at key: '{key}'"
+            )
             v[key] = f"{v[key].__module__}.{v[key].__class__.__qualname__}"
 
     return v
@@ -158,10 +177,12 @@ def recursive_deserialize(v):
     Returns:
         Deserialized object.
     """
+    logger.debug(f"Deserializing object with {len(v)} top-level keys")
     # deserialize
     v = deserialize_variables(v)
     for key, value in v.items():
         if isinstance(value, dict):
+            logger.debug(f"Recursively deserializing nested dict for key: '{key}'")
             v[key] = recursive_deserialize(value)
     return v
 
@@ -222,20 +243,25 @@ def parse_config(
     """
     config_file = None
     if isinstance(config, dict):
+        logger.debug("Parsing configuration from dictionary")
         d = config
     else:
         if isinstance(config, TextIOWrapper):
+            logger.debug(f"Reading configuration from file wrapper: {config.name}")
             yaml_str = config.read()
             config_file = os.path.abspath(config.name)
         elif isinstance(config, (str, os.PathLike)) and os.path.exists(config):
+            logger.debug(f"Loading configuration from file: {config}")
             with open(config) as f:
                 yaml_str = f.read()
             config_file = os.path.abspath(config)
         else:
+            logger.debug("Parsing configuration from YAML string")
             yaml_str = config
         d = recursive_deserialize(yaml.safe_load(yaml_str))
     if config_file is not None:
         config_dir = os.path.dirname(os.path.realpath(config_file))
+        logger.debug(f"Replacing relative paths using config directory: {config_dir}")
         d = replace_relative_paths(d, model_fields, config_dir)
     return model_kwargs_from_dict(d)
 
@@ -306,17 +332,25 @@ class LUMEBaseModel(BaseModel, ABC):
         """
         if len(args) == 1:
             if len(kwargs) > 0:
+                logger.error("Cannot specify both YAML config and keyword arguments")
                 raise ValueError(
                     "Cannot specify YAML string and keyword arguments for LUMEBaseModel init."
                 )
+            logger.debug("Initializing model from configuration")
             super().__init__(**parse_config(args[0], type(self).model_fields))
         elif len(args) > 1:
+            logger.error(f"Too many positional arguments: {len(args)}")
             raise ValueError(
                 "Arguments to LUMEBaseModel must be either a single YAML string "
                 "or keyword arguments passed directly to pydantic."
             )
         else:
+            logger.debug("Initializing model from keyword arguments")
             super().__init__(**kwargs)
+
+        logger.info(
+            f"Initialized {self.__class__.__name__} with {len(self.input_variables)} inputs and {len(self.output_variables)} outputs"
+        )
 
     @field_validator("input_variables", "output_variables")
     def unique_variable_names(cls, value):
@@ -433,6 +467,11 @@ class LUMEBaseModel(BaseModel, ABC):
             save_models: Determines whether models are saved to file.
             save_jit: Determines whether the model is saved as TorchScript.
         """
+        logger.info(f"Dumping model configuration to: {file}")
+        if save_models:
+            logger.debug("Saving model files alongside configuration")
+        if save_jit:
+            logger.debug("Saving models as TorchScript (JIT)")
         file_prefix = os.path.splitext(os.path.abspath(file))[0]
         with open(file, "w") as f:
             f.write(

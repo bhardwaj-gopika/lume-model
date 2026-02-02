@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lume-torch"
-description = "Data structures used in the LUME modeling toolset."
+description = "LUME compatible wrapper for Torch based surrogate models."
 readme = "README.md"
 authors = [
   { name = "SLAC National Accelerator Laboratory"},
@@ -24,9 +24,7 @@ dependencies = [
     "pydantic",
     "numpy",
     "pyyaml",
-    "torch",
     "botorch>=0.15",
-    "mlflow",
     "lume-base @ git+https://github.com/roussel-ryan/lume-base@main"
 ]
 dynamic = ["version"]
@@ -37,6 +35,9 @@ version_file = "lume_torch/_version.py"
 dev = [
     "pre-commit",
     "pytest"
+]
+mlflow = [
+    "mlflow-skinny"
 ]
 docs = [
     "mkdocs",

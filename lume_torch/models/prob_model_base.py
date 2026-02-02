@@ -1,3 +1,4 @@
+import logging
 from typing import Union, Any, Tuple
 from abc import abstractmethod
 
@@ -8,6 +9,8 @@ from torch.distributions import Distribution as TDistribution
 from lume_torch.variables import DistributionVariable
 from lume_torch.models.utils import InputDictModel, format_inputs, itemize_dict
 from lume_torch.base import LUMEBaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class ProbModelBaseModel(LUMEBaseModel):  # TODO: brainstorm a better name

@@ -1,4 +1,5 @@
 import os
+import logging
 import warnings
 from typing import Union
 from pathlib import Path
@@ -11,6 +12,8 @@ from torch.distributions.distribution import Distribution as TDistribution
 
 from lume_torch.models.prob_model_base import ProbModelBaseModel
 from lume_torch.models.torch_model import TorchModel
+
+logger = logging.getLogger(__name__)
 
 
 class NNEnsemble(ProbModelBaseModel):
@@ -26,6 +29,7 @@ class NNEnsemble(ProbModelBaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        logger.warning("NNEnsemble class is still under development")
         warnings.warn("This class is still under development.")
 
     @field_validator("models", mode="before")
@@ -38,15 +42,21 @@ class NNEnsemble(ProbModelBaseModel):
                     fname = m.split("_model.jit")[0]
                 if os.path.exists(m) and os.path.exists(f"{fname}.yml"):
                     # if it's a wrapper around TorchModel, might need a different class or a different way to load
+                    logger.debug(f"Loading TorchModel from: {fname}.yml")
                     v[i] = TorchModel(Path(f"{fname}.yml"))
                 else:
+                    logger.error(
+                        f"Missing required files for model loading: {m} or {fname}.yml"
+                    )
                     raise OSError(
                         f"Both files, {m} and {fname}.yml, are required to load the models."
                     )
 
         if not all(isinstance(m, TorchModel) for m in v):
+            logger.error("Not all models are TorchModel instances")
             raise TypeError("All models must be of type TorchModel.")
 
+        logger.info(f"Validated {len(v)} models for ensemble")
         return v
 
     def _get_predictions(

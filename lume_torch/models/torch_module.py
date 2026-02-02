@@ -1,6 +1,7 @@
 import os
 import json
 import yaml
+import logging
 import inspect
 from typing import Union, Any
 
@@ -9,6 +10,8 @@ import torch
 from lume_torch.base import parse_config, recursive_serialize
 from lume_torch.models.torch_model import TorchModel
 from lume_torch.mlflow_utils import register_model
+
+logger = logging.getLogger(__name__)
 
 
 class TorchModule(torch.nn.Module):
@@ -39,34 +42,50 @@ class TorchModule(torch.nn.Module):
               the TorchModel is used.
         """
         if all(arg is None for arg in [*args, model]):
+            logger.error("TorchModule requires either a YAML config or model argument")
             raise ValueError(
                 "Either a YAML string has to be given or model has to be defined."
             )
         super().__init__()
         if len(args) == 1:
             if not all(v is None for v in [model, input_order, output_order]):
+                logger.error(
+                    "Cannot specify both YAML config and keyword arguments for TorchModule"
+                )
                 raise ValueError(
                     "Cannot specify YAML string and keyword arguments for TorchModule init."
                 )
+            logger.debug("Initializing TorchModule from configuration file")
             model_fields = {f"model.{k}": v for k, v in TorchModel.model_fields.items()}
             kwargs = parse_config(args[0], model_fields)
             kwargs["model"] = TorchModel(kwargs["model"])
             self.__init__(**kwargs)
         elif len(args) > 1:
+            logger.error(f"Too many positional arguments to TorchModule: {len(args)}")
             raise ValueError(
                 "Arguments to TorchModule must be either a single YAML string or keyword arguments."
             )
         else:
+            logger.debug(f"Initializing TorchModule with model: {type(model).__name__}")
             self._model = model
             self._input_order = input_order
             self._output_order = output_order
             self.register_module("base_model", self._model.model)
+            logger.debug(
+                f"Registered {len(self._model.input_transformers)} input transformers"
+            )
             for i, input_transformer in enumerate(self._model.input_transformers):
                 self.register_module(f"input_transformers_{i}", input_transformer)
+            logger.debug(
+                f"Registered {len(self._model.output_transformers)} output transformers"
+            )
             for i, output_transformer in enumerate(self._model.output_transformers):
                 self.register_module(f"output_transformers_{i}", output_transformer)
             if not model.model.training:  # TorchModel defines train/eval mode
                 self.eval()
+            logger.info(
+                f"Initialized TorchModule with {len(self.input_order)} inputs and {len(self.output_order)} outputs"
+            )
 
     @property
     def model(self):
@@ -155,6 +174,11 @@ class TorchModule(torch.nn.Module):
             save_models: Determines whether models are saved to file.
             save_jit : Whether the model is saved using just in time pytorch method
         """
+        logger.info(f"Dumping TorchModule configuration to: {file}")
+        if save_models:
+            logger.debug("Saving model files alongside configuration")
+        if save_jit:
+            logger.debug("Saving TorchModule as TorchScript (JIT)")
         file_prefix = os.path.splitext(file)[0]
         with open(file, "w") as f:
             f.write(
@@ -190,6 +214,9 @@ class TorchModule(torch.nn.Module):
     @staticmethod
     def _validate_input(x: torch.Tensor) -> torch.Tensor:
         if x.dim() <= 1:
+            logger.error(
+                f"Invalid input dimensions: expected at least 2D ([n_samples, n_features]), got {tuple(x.shape)}"
+            )
             raise ValueError(
                 f"Expected input dim to be at least 2 ([n_samples, n_features]), received: {tuple(x.shape)}"
             )
@@ -308,12 +335,12 @@ class FixedVariableModel(torch.nn.Module):
         # Initialize buffer with fixed variables
         self.update_fixed_values(fixed_values)
 
-        print("FixedVariableModel initialized")
-        print(f"  Total inputs (from model): {len(self.all_inputs)}")
-        print(f"  Fixed variables: {len(self.fixed_indices)}")
-        print(f"  Control variables (derived): {len(self.control_variables)}")
-        print(f"  Control variables: {self.control_variables}")
-        print(f"  Control indices: {self.control_indices}")
+        logger.info("FixedVariableModel initialized")
+        logger.info(f"  Total inputs (from model): {len(self.all_inputs)}")
+        logger.info(f"  Fixed variables: {len(self.fixed_indices)}")
+        logger.info(f"  Control variables (derived): {len(self.control_variables)}")
+        logger.debug(f"  Control variables: {self.control_variables}")
+        logger.debug(f"  Control indices: {self.control_indices}")
 
     def update_fixed_values(self, fixed_values):
         """
@@ -330,6 +357,7 @@ class FixedVariableModel(torch.nn.Module):
         Returns:
             None. Updates self.input_buffer in-place.
         """
+        logger.debug(f"Updating {len(fixed_values)} fixed variable values")
         for var_name, value in fixed_values.items():
             idx = self.all_inputs.index(var_name)
             self.input_buffer[idx] = value

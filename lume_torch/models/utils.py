@@ -1,8 +1,11 @@
+import logging
 from typing import Union, Dict
 
 from pydantic import BaseModel, ConfigDict
 import torch
 from torch.distributions import Distribution
+
+logger = logging.getLogger(__name__)
 
 
 def itemize_dict(

@@ -12,32 +12,28 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: conda-incubator/setup-miniconda@v3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: 3.12
-          channels: conda-forge,defaults
-          activate-environment: lume-torch-dev
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install lume-torch
-        shell: bash -l {0}
-        run: |
-          pip install -e ".[dev]"
+        run: uv sync --extra dev
 
       - name: Install pre-commit
-        shell: bash -l {0}
-        run: conda install pre-commit
+        run: uv pip install pre-commit
 
       - name: List Python package versions
-        shell: bash -l {0}
-        run: conda list
+        run: uv pip list
 
       - name: Switch to a temporary branch
-        shell: bash -l {0}
-        run: |
-          git checkout -b _ci_branch_
+        run: git checkout -b _ci_branch_
 
       - name: Run pre-commit on all files
-        shell: bash -l {0}
         env:
           RUFF_OUTPUT_FORMAT: github
         run: |

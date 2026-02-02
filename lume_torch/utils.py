@@ -1,10 +1,13 @@
 import os
 import sys
 import yaml
+import logging
 import importlib
 from typing import Union, get_origin, get_args
 
 from lume_torch.variables import ScalarVariable, get_variable
+
+logger = logging.getLogger(__name__)
 
 
 def try_import_module(name: str):
@@ -19,10 +22,13 @@ def try_import_module(name: str):
     if name not in sys.modules:
         try:
             module = importlib.import_module(name)
-        except ImportError:
+            logger.debug(f"Successfully imported module: {name}")
+        except ImportError as e:
+            logger.debug(f"Failed to import module {name}: {e}")
             module = None
     else:
         module = sys.modules[name]
+        logger.debug(f"Module {name} already in sys.modules")
     return module
 
 
@@ -37,6 +43,7 @@ def verify_unique_variable_names(variables: list[ScalarVariable]):
     names = [var.name for var in variables]
     non_unique_names = [name for name in set(names) if names.count(name) > 1]
     if non_unique_names:
+        logger.error(f"Variable names {non_unique_names} are not unique")
         raise ValueError(f"Variable names {non_unique_names} are not unique.")
 
 
@@ -49,6 +56,7 @@ def serialize_variables(v: dict):
     Returns:
         Dictionary with serialized in- and output variables.
     """
+    logger.debug("Serializing variables")
     for key, value in v.items():
         if key in ["input_variables", "output_variables"] and isinstance(value, list):
             v[key] = {
@@ -71,6 +79,7 @@ def deserialize_variables(v):
     Returns:
         Dictionary with deserialized in- and output variables.
     """
+    logger.debug("Deserializing variables")
     for key, value in v.items():
         if key in ["input_variables", "output_variables"] and isinstance(value, dict):
             v[key] = [
@@ -94,6 +103,9 @@ def variables_as_yaml(
     Returns:
         YAML formatted string defining the in- and output variables.
     """
+    logger.debug(
+        f"Creating YAML for {len(input_variables)} input and {len(output_variables)} output variables"
+    )
     for variables in [input_variables, output_variables]:
         verify_unique_variable_names(variables)
     v = {
@@ -102,6 +114,7 @@ def variables_as_yaml(
     }
     s = yaml.safe_dump(serialize_variables(v), default_flow_style=None, sort_keys=False)
     if file is not None:
+        logger.info(f"Saving variables to file: {file}")
         with open(file, "w") as f:
             f.write(s)
     return s
@@ -118,6 +131,7 @@ def variables_from_dict(
     Returns:
         In- and output variable lists.
     """
+    logger.debug("Parsing variables from dictionary")
     input_variables, output_variables = [], []
     for key, value in {**config}.items():
         if key in ["input_variables", "output_variables"]:
@@ -129,6 +143,9 @@ def variables_from_dict(
                     output_variables.append(variable_class(**var))
     for variables in [input_variables, output_variables]:
         verify_unique_variable_names(variables)
+    logger.debug(
+        f"Parsed {len(input_variables)} input and {len(output_variables)} output variables"
+    )
     return input_variables, output_variables
 
 
@@ -144,9 +161,11 @@ def variables_from_yaml(
         In- and output variable lists.
     """
     if os.path.exists(yaml_obj):
+        logger.debug(f"Loading variables from file: {yaml_obj}")
         with open(yaml_obj) as f:
             yaml_str = f.read()
     else:
+        logger.debug("Parsing variables from YAML string")
         yaml_str = yaml_obj
     config = deserialize_variables(yaml.safe_load(yaml_str))
     return variables_from_dict(config)
@@ -167,10 +186,15 @@ def get_valid_path(
     """
     relative_path = os.path.join(directory, path)
     if os.path.exists(relative_path):
+        logger.debug(f"Found relative path: {relative_path}")
         return os.path.abspath(relative_path)
     elif os.path.exists(path):
+        logger.debug(f"Found absolute path: {path}")
         return os.path.abspath(path)
     else:
+        logger.error(
+            f"File {path} not found in directory {directory} or as absolute path"
+        )
         raise OSError(f"File {path} is not found.")
 
 
@@ -189,6 +213,7 @@ def replace_relative_paths(
     Returns:
         Dictionary with replaced paths.
     """
+    logger.debug(f"Replacing relative paths with directory base: {directory}")
     if model_fields is None:
         model_fields = {}
     for k, v in d.items():

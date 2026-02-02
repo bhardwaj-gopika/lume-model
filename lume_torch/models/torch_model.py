@@ -100,11 +100,12 @@ class TorchModel(LUMEBaseModel):
                 fname = v
                 try:
                     v = torch.jit.load(v)
-                    print(f"Loaded TorchScript (JIT) model from file: {fname}")
+                    logger.info(f"Loaded TorchScript (JIT) model from file: {fname}")
                 except RuntimeError:
                     v = torch.load(v, weights_only=False)
-                    print(f"Loaded PyTorch model from file: {fname}")
+                    logger.info(f"Loaded PyTorch model from file: {fname}")
             else:
+                logger.error(f"File {v} not found")
                 raise OSError(f"File {v} is not found.")
         return v
 
@@ -113,6 +114,9 @@ class TorchModel(LUMEBaseModel):
         """Verifies that input variables have the required default values."""
         for var in value:
             if var.default_value is None:
+                logger.error(
+                    f"Input variable {var.name} is missing required default value"
+                )
                 raise ValueError(
                     f"Input variable {var.name} must have a default value."
                 )
@@ -121,13 +125,16 @@ class TorchModel(LUMEBaseModel):
     @field_validator("input_transformers", "output_transformers", mode="before")
     def validate_transformers(cls, v):
         if not isinstance(v, list):
+            logger.error(f"Transformers must be a list, got {type(v)}")
             raise ValueError("Transformers must be passed as list.")
         loaded_transformers = []
         for t in v:
             if isinstance(t, (str, os.PathLike)):
                 if os.path.exists(t):
                     t = torch.load(t, weights_only=False)
+                    logger.debug(f"Loaded transformer from file: {t}")
                 else:
+                    logger.error(f"Transformer file {t} not found")
                     raise OSError(f"File {t} is not found.")
             loaded_transformers.append(t)
         v = loaded_transformers
@@ -137,6 +144,9 @@ class TorchModel(LUMEBaseModel):
     def validate_output_format(cls, v):
         supported_formats = ["tensor", "variable", "raw"]
         if v not in supported_formats:
+            logger.error(
+                f"Invalid output format {v}, expected one of {supported_formats}"
+            )
             raise ValueError(
                 f"Unknown output format {v}, expected one of {supported_formats}."
             )

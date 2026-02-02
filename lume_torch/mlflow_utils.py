@@ -1,21 +1,23 @@
 import os
 import warnings
+import logging
 from typing import Any
 from contextlib import nullcontext
 
 from torch import nn
 
+logger = logging.getLogger(__name__)
+
 try:
     import mlflow
 
     HAS_MLFLOW = True
-    import logging
 
-    logger = logging.getLogger("mlflow")
+    mlflow_logger = logging.getLogger("mlflow")
     # Set log level to error until annoying signature warnings are fixed
-    logger.setLevel(logging.ERROR)
+    mlflow_logger.setLevel(logging.ERROR)
 except ImportError:
-    pass
+    HAS_MLFLOW = False
 
 
 def register_model(
@@ -29,7 +31,7 @@ def register_model(
     log_model_dump: bool = True,
     save_jit: bool = False,
     **kwargs,
-) -> mlflow.models.model.ModelInfo:
+) -> Any:
     """
     Registers the model to MLflow if mlflow is installed. Each time this function is called, a new version
     of the model is created. The model is saved to the tracking server or local directory, depending on the
@@ -57,11 +59,22 @@ def register_model(
         Model info metadata, mlflow.models.model.ModelInfo.
     """
     if not HAS_MLFLOW:
-        raise ImportError("MLflow is not installed. Cannot register model.")
+        logger.error("MLflow is not installed - cannot register model")
+        raise ImportError(
+            "MLflow is not installed. Please install mlflow-skinny to use this feature: "
+            "pip install 'lume-torch[mlflow]'"
+        )
     if "MLFLOW_TRACKING_URI" not in os.environ:
+        logger.warning(
+            "MLFLOW_TRACKING_URI not set - artifacts will be saved to current directory"
+        )
         warnings.warn(
             "MLFLOW_TRACKING_URI is not set. Data and artifacts will be saved directly under your current directory."
         )
+
+    logger.info(f"Registering model to MLflow with artifact_path: {artifact_path}")
+    if registered_model_name:
+        logger.info(f"Registered model name: {registered_model_name}")
 
     # Log the model to MLflow
     ctx = (
@@ -71,6 +84,7 @@ def register_model(
     )
     with ctx:
         if isinstance(lume_torch, nn.Module):
+            logger.debug("Logging PyTorch nn.Module model to MLflow")
             model_info = mlflow.pytorch.log_model(
                 pytorch_model=lume_torch,
                 artifact_path=artifact_path,
@@ -79,6 +93,7 @@ def register_model(
             )
         else:
             # Create pyfunc model for MLflow to be able to log/load the model
+            logger.debug("Logging custom model as MLflow pyfunc")
             pf_model = create_mlflow_model(lume_torch)
             model_info = mlflow.pyfunc.log_model(
                 python_model=pf_model,
@@ -88,6 +103,7 @@ def register_model(
             )
 
         if log_model_dump:
+            logger.debug("Logging model dump files to MLflow")
             # Log the model dump files to MLflow
             # TODO: pass directory where user wants local dump to, default to working directory
             run_name = mlflow.active_run().info.run_name
@@ -126,6 +142,7 @@ def register_model(
                     os.remove(f"{name}_output_transformers_{i}.pt")
 
     if (tags or alias or version_tags) and registered_model_name:
+        logger.debug("Setting MLflow model tags and aliases")
         from mlflow import MlflowClient
 
         client = MlflowClient()
@@ -133,55 +150,69 @@ def register_model(
         latest_version = model_info.registered_model_version
 
         if tags:
+            logger.debug(f"Setting {len(tags)} registered model tags")
             for key, value in tags.items():
                 client.set_registered_model_tag(registered_model_name, key, value)
         if version_tags:
+            logger.debug(f"Setting {len(version_tags)} version tags")
             for key, value in version_tags.items():
                 client.set_model_version_tag(
                     registered_model_name, latest_version, key, value
                 )
         if alias:
+            logger.debug(f"Setting alias: {alias}")
             client.set_registered_model_alias(
                 registered_model_name, alias, latest_version
             )
 
     elif (tags or alias or version_tags) and not registered_model_name:
+        logger.warning(
+            "No registered model name provided - tags and aliases will not be set"
+        )
         warnings.warn(
             "No registered model name provided. Tags and aliases will not be set."
         )
 
+    logger.info("Model successfully registered to MLflow")
     return model_info
 
 
-def create_mlflow_model(model) -> mlflow.pyfunc.PythonModel:
+def create_mlflow_model(model) -> Any:
     """Creates an MLflow model from the given model."""
+    if not HAS_MLFLOW:
+        raise ImportError(
+            "MLflow is not installed. Please install mlflow-skinny to use this feature: "
+            "pip install 'lume-torch[mlflow]'"
+        )
     return PyFuncModel(model=model)
 
 
-class PyFuncModel(mlflow.pyfunc.PythonModel):
-    """
-    Custom MLflow model class for LUMETorch.
-    Uses Pyfunc to define a model that can be saved and loaded with MLflow.
+if HAS_MLFLOW:
 
-    Must implement the `predict` method.
-    """
+    class PyFuncModel(mlflow.pyfunc.PythonModel):
+        """
+        Custom MLflow model class for LUMETorch.
+        Uses Pyfunc to define a model that can be saved and loaded with MLflow.
 
-    # Disable type hint validation for the predict method to avoid annoying warnings
-    # since we have type validation in the lume-torch itself.
-    _skip_type_hint_validation = True
+        Must implement the `predict` method.
+        """
 
-    def __init__(self, model):
-        self.model = model
+        # Disable type hint validation for the predict method to avoid annoying warnings
+        # since we have type validation in the lume-torch itself.
+        _skip_type_hint_validation = True
 
-    def predict(self, model_input):
-        """Evaluate the model with the given input."""
-        return self.model.evaluate(model_input)
+        def __init__(self, model):
+            self.model = model
 
-    def save_model(self):
-        raise NotImplementedError("Save model not implemented")
+        def predict(self, model_input):
+            """Evaluate the model with the given input."""
+            return self.model.evaluate(model_input)
 
-    def load_model(self):
-        raise NotImplementedError("Load model not implemented")
+        def save_model(self):
+            raise NotImplementedError("Save model not implemented")
 
-    def get_lume_torch(self):
-        return self.model
+        def load_model(self):
+            raise NotImplementedError("Load model not implemented")
+
+        def get_lume_torch(self):
+            return self.model

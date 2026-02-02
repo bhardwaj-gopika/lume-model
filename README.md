@@ -1,6 +1,6 @@
-# LUME-model
+# LUME-Torch
 
-LUME-model holds data structures used in the LUME modeling toolset. Variables and models built using LUME-model will be compatible with other tools. LUME-model uses [pydantic](https://pydantic-docs.helpmanual.io/) models to enforce typed attributes upon instantiation.
+LUME-torch holds data structures used in the LUME modeling toolset. Variables and models built using LUME-torch will be compatible with other tools. LUME-torch uses [pydantic](https://pydantic-docs.helpmanual.io/) models to enforce typed attributes upon instantiation.
 
 ## Requirements
 
@@ -12,13 +12,13 @@ LUME-model holds data structures used in the LUME modeling toolset. Variables an
 
 ## Install
 
-LUME-model can be installed with conda using the command:
+LUME-torch can be installed with conda using the command:
 
-``` $ conda install lume-model -c conda-forge ```
+``` $ conda install lume-torch -c conda-forge ```
 
 or through pip (coming soon):
 
-``` $ pip install lume-model ```
+``` $ pip install lume-torch ```
 
 ## Developer
 
@@ -280,12 +280,8 @@ regular PyTorch model. You can pass tensor-type inputs to the model and
 get tensor-type outputs.
 
 ```python
-from torch import tensor
-from lume_torch.models.torch_module import TorchModule
-
-
 # Example input tensor
-input_data = tensor([[0.1, 0.2]])
+input_data = torch.tensor([[0.1, 0.2]])
 
 # Evaluate the model
 output = torch_module(input_data)
@@ -298,3 +294,115 @@ print(output)
 The `TorchModule` class' dump method has the option to save as a scripted JIT model by passing `save_jit=True` when calling the dump method. This will save the model as a TorchScript model, which can be loaded and used without the need for the original model file.
 
 Note that saving as JIT through scripting has only been evaluated for NN models that don't depend on BoTorch modules.
+
+
+## Logging
+
+LUME-torch uses Python's standard `logging` module throughout the codebase to provide visibility into the library's operations. Logging configuration is left to the user application to allow maximum flexibility.
+
+### Configuring Logging
+
+To configure logging for your application using LUME-torch, set up the logging configuration in your application code:
+
+```python
+import logging
+
+# Basic configuration - logs to console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Now use lume-torch
+from lume_torch.models.torch_model import TorchModel
+torch_model = TorchModel("path/to/model_config.yml")
+```
+
+### Advanced Configuration
+
+For more control over logging output, you can configure specific loggers:
+
+```python
+import logging
+
+# Configure root logger
+logging.basicConfig(level=logging.WARNING)
+
+# Set specific log levels for lume-torch modules
+logging.getLogger('lume_torch').setLevel(logging.INFO)
+logging.getLogger('lume_torch.base').setLevel(logging.DEBUG)
+logging.getLogger('lume_torch.models').setLevel(logging.INFO)
+```
+
+### Log Level Guidelines
+
+LUME-torch follows standard Python logging practices with the following log levels:
+
+* **DEBUG**: Detailed diagnostic information useful for troubleshooting
+  - Module imports and initialization details
+  - Variable parsing and serialization steps
+  - Path resolution and file operations
+  - Input/output transformation details
+
+* **INFO**: General informational messages about normal operations
+  - Model loading and initialization
+  - File saving operations
+  - MLflow model registration
+  - Configuration file processing
+
+* **WARNING**: Warning messages for potentially problematic situations
+  - Deprecation warnings
+  - Missing optional configurations
+  - Fallback behaviors
+  - JIT compilation limitations
+
+* **ERROR**: Error messages logged before exceptions are raised
+  - Validation failures
+  - File not found errors
+  - Invalid configurations
+  - Type mismatches
+
+### Example: Production Logging Setup
+
+For production environments, you may want to log to a file with rotation:
+
+```python
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Create formatters and handlers
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# File handler with rotation
+file_handler = RotatingFileHandler(
+    'lume_torch_app.log',
+    maxBytes=10485760,  # 10MB
+    backupCount=5
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+# Console handler for errors only
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.ERROR)
+console_handler.setFormatter(formatter)
+
+# Configure lume-torch logger
+lume_logger = logging.getLogger('lume_torch')
+lume_logger.setLevel(logging.INFO)
+lume_logger.addHandler(file_handler)
+lume_logger.addHandler(console_handler)
+```
+
+### Disabling Logging
+
+If you want to suppress all LUME-torch logging:
+
+```python
+import logging
+
+# Disable all lume-torch logging
+logging.getLogger('lume_torch').setLevel(logging.CRITICAL)
+```

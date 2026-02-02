@@ -6,10 +6,13 @@ but they can be used to validate encountered values.
 For now, only scalar floating-point variables are supported.
 """
 
+import logging
 from typing import Optional, Type
 
 from torch.distributions import Distribution as TDistribution
 from lume.variables import Variable, ScalarVariable, ConfigEnum
+
+logger = logging.getLogger(__name__)
 
 # Re-export base classes for backward compatibility and clean API
 __all__ = [
@@ -74,6 +77,9 @@ def get_variable(name: str) -> Type[Variable]:
     classes = [ScalarVariable, DistributionVariable]
     class_lookup = {c.__name__: c for c in classes}
     if name not in class_lookup.keys():
+        logger.error(
+            f"Unknown variable type '{name}', valid names are {list(class_lookup.keys())}"
+        )
         raise KeyError(
             f"No variable named {name}, valid names are {list(class_lookup.keys())}"
         )
