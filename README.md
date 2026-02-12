@@ -1,5 +1,7 @@
 # LUME-Torch
 
+> **⚠️ Note:** This package was previously known as `lume-model`. It has been renamed to `lume-torch`. Documentation pages are currently being updated to reflect this change. Some references to `lume-model` may still appear in older documentation.
+
 LUME-Torch is a LUME compatible wrapper for Torch based surrogate models. It provides a consistent API for defining
 surrogate models, variables, and configuration files, as well as utilities for loading and saving models.
 
