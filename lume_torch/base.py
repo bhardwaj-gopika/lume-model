@@ -862,24 +862,6 @@ class LUMETorchModel(LUMEModel):
         # Update state with outputs
         self._state.update(output_dict)
 
-    def evaluate(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
-        """
-        Evaluate the torch model directly without updating state.
-
-        Parameters
-        ----------
-        input_dict : dict[str, Any]
-            Dictionary of input variable names to values.
-        **kwargs
-            Additional keyword arguments passed to the torch model's evaluate.
-
-        Returns
-        -------
-        dict[str, Any]
-            Dictionary of output variable names to values.
-        """
-        return self.torch_model.evaluate(input_dict, **kwargs)
-
     def reset(self) -> None:
         """Reset the model to its initial state."""
         self._state = self._initial_state.copy()
@@ -895,8 +877,7 @@ class LUMETorchModel(LUMEModel):
 
         # Add output variables (marked as read-only)
         for var in self.torch_model.output_variables:
-            if hasattr(var, "read_only"):
-                var.read_only = True
+            var.read_only = True
             variables[var.name] = var
 
         return variables
